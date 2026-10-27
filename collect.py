@@ -36,7 +36,9 @@ def main():
     tok, model = load_model(MODELS[a.model], a.load_4bit)
 
     for lang in a.langs:
-        acts_p, meta_p = outdir / f"{lang}_acts.npy", outdir / f"{lang}_meta.jsonl"
+        # Smoke runs (--limit) write separate files, so they never make a full run skip this language.
+        stem = f"{lang}_smoke" if a.limit else lang
+        acts_p, meta_p = outdir / f"{stem}_acts.npy", outdir / f"{stem}_meta.jsonl"
         if acts_p.exists() and meta_p.exists() and not a.limit:
             print(f"skip {lang} (done)")
             continue
@@ -65,7 +67,9 @@ def main():
                     rate = (time.time() - t0) / (i + 1)
                     print(f"{lang}: {i+1}/{len(scen)}  {rate:.1f}s each")
         np.save(acts_p, np.stack(all_acts))
-        print(f"saved {lang}: {len(scen)} scenarios")
+        rate = (time.time() - t0) / len(scen)
+        print(f"saved {lang}: {len(scen)} scenarios, {rate:.1f}s each "
+              f"(x840 = {rate * 840 / 3600:.1f} h for a full run)")
 
 
 if __name__ == "__main__":

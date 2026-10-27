@@ -56,8 +56,9 @@ python collect.py --model qwen3-8b --langs en hi hi_en mr mr_en ta ta_en
 python collect.py --model dhee-pravega --langs en hi hi_en mr mr_en ta ta_en
 
 # 5. Black-box baseline
-python judge.py --agent qwen3-8b
-python judge.py --agent dhee-pravega
+#    Judge is sarvamai/sarvam-m (24B); --load-4bit fits it on 2xT4
+python judge.py --agent qwen3-8b --load-4bit
+python judge.py --agent dhee-pravega --load-4bit
 
 # 6. Probes + plots
 python probes.py --model qwen3-8b
@@ -86,7 +87,7 @@ Inbox items for the demo (`read_inbox_item`) are JSON files in `inbox/` that you
 - Folds are split by `pair_id`, so a scenario, its twin, and all their translations stay together; nothing leaks across languages.
 - The best layer is chosen on English, so the English score is slightly optimistic; other languages are not affected by that choice.
 - The judge sees the agent's generated move; the probe reads activations before the move exists. The judge therefore has more information.
-- For Qwen3-8B the judge is the same model. A different judge model would be a fairer baseline.
+- The judge is `sarvamai/sarvam-m` (Mistral-based, Indic-tuned), a different model family from both agents. On T4s it runs in 4-bit, which may lower its accuracy slightly.
 - 60 pairs is a pilot. Treat results as indicative and report confidence intervals before making claims.
 - In the live demo, probe scores before the first lookup are outside the training distribution; only world-changing actions are gated.
 

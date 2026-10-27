@@ -36,6 +36,7 @@ Does an LLM agent internally represent that an action will harm the user, before
 | 5 harm domains × 12 minimal pairs = 120 English scenarios | Minimal pairs stop probes from scoring on surface differences |
 | Folds split by `pair_id` across all languages | Prevents translated copies of training items leaking into test |
 | Threshold fixed at 5% FPR on English, applied unchanged to other languages | Mirrors how a deployed gate behaves |
+| Judge: `sarvamai/sarvam-m` for both agents (4-bit on T4) | Raj chose it 27 Oct: covers hi/mr/ta, not gated, different family from Qwen and Gemma |
 | Backend: swappable. Real HTTP sandbox if configured, otherwise explicit dry-run | Raj will say which sandbox. No faked responses ever |
 
 ## Hard constraints
@@ -88,7 +89,6 @@ If time runs short before Saturday, ask Raj before cutting scope. Possible cuts:
 ## Open questions for Raj
 
 - Which sandbox backend (SAFL-provided, a vendor sandbox such as Cashfree's verification sandbox, or other)? He said he will confirm.
-- Judge model: Qwen3-8B judges itself for the Qwen agent. A different judge would be fairer; ask before changing.
 - What the SAFL submission form asks for (video, repo, write-up). Not yet known.
 
 ## Known method limits (keep these visible in any write-up)
