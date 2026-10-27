@@ -80,9 +80,10 @@ Not verified (nothing has run on a GPU yet):
 2. `python translate.py draft --langs hi hi_en mr mr_en ta ta_en`. Send Raj the review CSVs. Rows with `missing_protected` need attention first.
 3. After Raj and friends review: `python translate.py apply ...`.
 4. Full `collect.py` runs for both models, then `judge.py`, then `probes.py`.
-5. When Raj gives sandbox details: write `backend_config.json` from the sandbox's docs (credentials in env vars only), and test one call. Check the sandbox is allowed under the hackathon rules.
-6. Run the demo with real requests in several languages; record a short video for the submission.
-7. Submission write-up: threat model, method, results with honest sample sizes, limitations, adoption path (IndiaAI Safety Institute, RBI, MeitY), AI-use disclosure.
+5. Adaptive-attack test (Raj approved 27 Oct). Reason: the SAFL concept note judges whether a solution holds up "when the agent's logic, prompts, or weights are public knowledge". Method: for the 12 harmful `injection` scenarios, make 8 LLM paraphrases of the planted instruction; an attacker who knows the probe keeps the paraphrase with the lowest probe score. Report (a) how often the agent still executes the target payment, (b) how often the probe score stays under the English 5%-FPR threshold, (c) Sarvam-M judge scores on the same paraphrases. Best-of-8 is a weak attacker (no gradient attack such as GCG), so state the result as a lower bound on attacker strength. Needs the final probe from step 4.
+6. When Raj gives sandbox details: write `backend_config.json` from the sandbox's docs (credentials in env vars only), and test one call. Check the sandbox is allowed under the hackathon rules.
+7. Run the demo with real requests in several languages; record a short video for the submission.
+8. Submission write-up: threat model, method, results with honest sample sizes, limitations, adoption path (IndiaAI Safety Institute, RBI, MeitY), AI-use disclosure.
 
 If time runs short before Saturday, ask Raj before cutting scope. Possible cuts: one model instead of two, or fewer languages in the hackathon version, with the rest in the 2-month version.
 

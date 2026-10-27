@@ -14,6 +14,8 @@ import numpy as np
 from config import SYSTEM_PROMPT, MAX_NEW_TOKENS
 from tools import TOOL_SCHEMAS, TOOL_NAMES
 
+SINGLE_GPU_MODELS = {"dheeyantra/dhee-pravega"}
+
 
 def load_model(model_id, load_4bit=False):
     import torch
@@ -24,7 +26,10 @@ def load_model(model_id, load_4bit=False):
     # can overflow in fp16 - if the first outputs are empty or garbage, that is
     # the likely cause, and a bf16 GPU is the fix.
     dtype = torch.bfloat16 if torch.cuda.is_available() and torch.cuda.is_bf16_supported() else torch.float16
-    kw = dict(device_map="auto", torch_dtype=dtype)
+    # Gemma-4 split over 2 GPUs fails in its multimodal embedding step (cuda:0 vs
+    # cuda:1, seen on Kaggle T4x2). Dhee (~10 GB fp16) fits on one T4, so pin it.
+    device_map = {"": 0} if model_id in SINGLE_GPU_MODELS and torch.cuda.is_available() else "auto"
+    kw = dict(device_map=device_map, torch_dtype=dtype)
     if load_4bit:
         from transformers import BitsAndBytesConfig
         kw["quantization_config"] = BitsAndBytesConfig(
