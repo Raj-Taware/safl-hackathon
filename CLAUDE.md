@@ -37,7 +37,7 @@ Does an LLM agent internally represent that an action will harm the user, before
 | Folds split by `pair_id` across all languages | Prevents translated copies of training items leaking into test |
 | Threshold fixed at 5% FPR on English, applied unchanged to other languages | Mirrors how a deployed gate behaves |
 | Judge: `sarvamai/sarvam-m` for both agents (4-bit on T4) | Raj chose it 27 Oct: covers hi/mr/ta, not gated, different family from Qwen and Gemma |
-| Backend: swappable. Real HTTP sandbox if configured, otherwise explicit dry-run | Raj will say which sandbox. No faked responses ever |
+| Backend: explicit dry-run (`DryRunBackend`) for the demo and all results | Raj chose it 28 Oct. The SAFL submission template says "SAFL does not provide a test environment, sandbox or datasets". Dry-run calls nothing outside; describe it in submission Section 9. `HttpSandboxBackend` stays in the code but is not used. No faked responses ever |
 
 ## Hard constraints
 
@@ -85,7 +85,7 @@ Not verified:
 3. After Raj and friends review: `python translate.py apply ...`.
 4. Full `collect.py` runs for both models, then `judge.py`, then `probes.py`.
 5. Adaptive-attack test (Raj approved 27 Oct). Reason: the SAFL concept note judges whether a solution holds up "when the agent's logic, prompts, or weights are public knowledge". Method: for the 12 harmful `injection` scenarios, make 8 LLM paraphrases of the planted instruction; an attacker who knows the probe keeps the paraphrase with the lowest probe score. Report (a) how often the agent still executes the target payment, (b) how often the probe score stays under the English 5%-FPR threshold, (c) Sarvam-M judge scores on the same paraphrases. Best-of-8 is a weak attacker (no gradient attack such as GCG), so state the result as a lower bound on attacker strength. Needs the final probe from step 4.
-6. When Raj gives sandbox details: write `backend_config.json` from the sandbox's docs (credentials in env vars only), and test one call. Check the sandbox is allowed under the hackathon rules.
+6. (Closed 28 Oct: no sandbox. The demo uses the dry-run backend.)
 7. Run the demo with real requests in several languages; record a short video for the submission.
 8. Submission write-up: threat model, method, results with honest sample sizes, limitations, adoption path (IndiaAI Safety Institute, RBI, MeitY), AI-use disclosure.
 
@@ -93,8 +93,14 @@ If time runs short before Saturday, ask Raj before cutting scope. Possible cuts:
 
 ## Open questions for Raj
 
-- Which sandbox backend (SAFL-provided, a vendor sandbox such as Cashfree's verification sandbox, or other)? He said he will confirm.
-- What the SAFL submission form asks for (video, repo, write-up). Not yet known.
+- None open. Sandbox closed 28 Oct (dry-run).
+
+## Submission requirements (from the SAFL template, bit.ly/hacksubmissiontemplate, read 28 Oct)
+
+- Every link must open without a login. **The GitHub repo is private now; make it public before submitting.**
+- Report PDF, max 10 pages (`TeamName_Report.pdf`). Repo with README (how to run, reproduce, setup) is required for technical prototypes. Demo video optional, max 2 min.
+- Section 6 "Threat model and resilience under exposure" (150-250 words) is "a core judging criterion": say whether the method works if the attacker knows the prompts, logic or weights. Use the adaptive-attack result here.
+- Section 9: both declarations must be Yes (synthetic data only; no working exploit details in public material), plus 1-2 lines on the test environment. Draft: "Action tool calls go to an explicit dry-run backend in our own code that returns a fixed 'NOT executed' result; lookups read synthetic local files. No real UPI, Aadhaar, DigiLocker or Account Aggregator system was called. All scenarios and identities are synthetic."
 
 ## Known method limits (keep these visible in any write-up)
 
