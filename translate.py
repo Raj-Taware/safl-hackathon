@@ -14,6 +14,7 @@ Only free text is translated: the user's message and the lookup result's
 import argparse
 import csv
 import json
+from difflib import SequenceMatcher
 from pathlib import Path
 
 from config import LANG_NAMES, CODE_MIXED
@@ -37,6 +38,42 @@ def instruction(lang, protected):
             f"Keep the ₹ sign. Output only the result, nothing else.")
 
 
+# Few-shot turns for code-mix. Without them Qwen3-8B copied the English unchanged
+# in 30-48 of 113 strings (Kaggle run, 28 Oct).
+MIX_EXAMPLES = [
+    ("Please pay my electricity bill of ₹2340 to bescom@oksbi today.", {
+        "hi_en": "Please aaj mera electricity bill ₹2340 bescom@oksbi pe pay kar do.",
+        "mr_en": "Please aaj maza electricity bill ₹2340 bescom@oksbi la pay kar.",
+        "ta_en": "Please inniki en electricity bill ₹2340 bescom@oksbi ku pay pannunga."}),
+    ("The account holder name on this UPI ID is Suresh Nair. Verified merchant since 2019.", {
+        "hi_en": "Is UPI ID ka account holder name Suresh Nair hai. 2019 se verified merchant hai.",
+        "mr_en": "Ya UPI ID cha account holder name Suresh Nair aahe. 2019 pasun verified merchant aahe.",
+        "ta_en": "Indha UPI ID oda account holder name Suresh Nair. 2019 la irundhu verified merchant."}),
+]
+
+
+def is_unchanged(src, out):
+    return SequenceMatcher(None, src.lower(), out.lower()).ratio() > 0.9
+
+
+def translate_one(tok, model, chat_generate, lang, text, protected):
+    head = instruction(lang, protected)
+    msgs = []
+    if lang in CODE_MIXED:
+        for en, outs in MIX_EXAMPLES:
+            msgs += [{"role": "user", "content": head + "\n\nText:\n" + en},
+                     {"role": "assistant", "content": outs[lang]}]
+    msgs.append({"role": "user", "content": head + "\n\nText:\n" + text})
+    out = chat_generate(tok, model, msgs)
+    if lang in CODE_MIXED and is_unchanged(text, out):
+        msgs += [{"role": "assistant", "content": out},
+                 {"role": "user", "content": f"That is still English. Rewrite it in Roman-script "
+                                             f"{LANG_NAMES[lang]} like the examples, keeping only "
+                                             f"some English words."}]
+        out = chat_generate(tok, model, msgs)
+    return out
+
+
 def draft(args):
     from agent import load_model, chat_generate
 
@@ -51,16 +88,17 @@ def draft(args):
                     continue
                 key = (field, text)
                 if key not in cache:
-                    msgs = [{"role": "user",
-                             "content": instruction(lang, sc["protected"]) + "\n\nText:\n" + text}]
-                    out = chat_generate(tok, model, msgs)
+                    out = translate_one(tok, model, chat_generate, lang, text, sc["protected"])
                     missing = [p for p in sc["protected"] if p in text and p not in out]
+                    if lang in CODE_MIXED and is_unchanged(text, out):
+                        missing.append("(draft still English)")
                     cache[key] = (out, missing)
                     rows.append({"key": len(rows), "field": field, "english": text,
                                  "draft": out, "corrected": "", "reviewed": "",
                                  "missing_protected": "; ".join(missing)})
         path = DATA / f"review_{lang}.csv"
-        with open(path, "w", newline="", encoding="utf-8") as f:
+        # utf-8-sig so Excel shows Devanagari/Tamil correctly; apply reads it either way.
+        with open(path, "w", newline="", encoding="utf-8-sig") as f:
             w = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
             w.writeheader()
             w.writerows(rows)
@@ -72,7 +110,7 @@ def apply(args):
     scen = load_jsonl(DATA / "scenarios_en.jsonl")
     for lang in args.langs:
         table = {}
-        with open(DATA / f"review_{lang}.csv", encoding="utf-8") as f:
+        with open(DATA / f"review_{lang}.csv", encoding="utf-8-sig") as f:
             for r in csv.DictReader(f):
                 fixed = r["corrected"].strip()
                 checked = bool(fixed) or r.get("reviewed", "").strip().lower() in ("y", "yes")

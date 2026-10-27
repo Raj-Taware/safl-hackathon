@@ -46,18 +46,22 @@ Does an LLM agent internally represent that an action will harm the user, before
 - Code written before the event must be cited; the core work must happen in the hackathon window (it does, from 27 Oct).
 - Compute: Kaggle dual-T4, Colab free, occasional BITS HPC H100, vast.ai. About 7-9B open models, inference and activation access only.
 
-## Status (as of 27 Oct 2026, evening IST)
+## Status (as of 27 Oct 2026, late evening IST)
 
 Verified:
 - `python -m pytest tests -q` passes (12 tests, offline, no GPU).
 - Both models' real chat templates render the scenario prompts (checked with downloaded tokenizers).
 - Dhee-Pravega emits `<|tool_call>call:name{key:<|"|>val<|"|>}<tool_call|>`; `agent.parse_tool_calls` handles it (tested on a hand-written sample, not real model output).
 - `data/scenarios_en.jsonl` generated (120 rows, seed 0).
+- GPU smoke test passed on Kaggle T4x2, fp16 (kernel `rajtaware10/safl-dpi-smoke-test` v3, 27 Oct; code from private dataset `rajtaware10/safl-dpi-probe-gate-code`). 5 English scenarios per model, `payee_mismatch` only:
+  - Qwen3-8B: acts (5, 37, 4096), all finite. 9.1 s/scenario (about 2.1 h per 840). Called no tool in 5/5; it asked the user to confirm, and did not mention the payee-name mismatch.
+  - Dhee-Pravega: acts (5, 36, 1536), all finite. 9.8 s/scenario (about 2.3 h per 840). Called `send_upi_payment` in 5/5, harmful cases too; the parser handles its real output. It also writes extra invented calls and a "payment sent" message in the same turn, because generation does not stop at the first tool call. `executed_target` checks all parsed calls, not only the first.
+  - Dhee must load on one GPU (`SINGLE_GPU_MODELS` in `agent.py`): split over 2 GPUs, Gemma-4 fails with a cuda:0 vs cuda:1 error.
+  - `kaggle kernels logs` returned nothing; the notebook writes logs to `/kaggle/working/logs/`, read them with `kaggle kernels output ... --file-pattern logs`.
 
-Not verified (nothing has run on a GPU yet):
-- Model loading, generation, activation capture, tool-call parsing on real outputs, speed per scenario.
-- fp16 behaviour on T4s. `load_model` uses bf16 when the GPU supports it, else fp16. Empty or garbled output on T4 likely means fp16 overflow; move to a bf16 GPU.
-- Translation quality; review sheets do not exist yet.
+Not verified:
+- Behaviour on the other 4 harm domains and on translated text (smoke test covered `payee_mismatch` only).
+- Translation quality. Review sheets exist (28 Oct, Kaggle kernel `rajtaware10/safl-dpi-translate`, Qwen3-8B drafts, 113 strings per language) and were sent to Raj; human review not done. Known problems: hi/mr/ta drafts write names in native script (54/42/54 rows flagged) and break 8/10/6 UPI IDs. Code-mixed sheets were re-drafted with few-shot examples (v2, `kaggle_translate/` now runs only hi_en mr_en ta_en); rows still English: hi_en 1, mr_en 13, ta_en 39. Tamil drafts are weak and some change the meaning. The review CSVs are not committed yet.
 - Any backend. `backend_config.json` does not exist; everything runs dry-run.
 
 ## File map
