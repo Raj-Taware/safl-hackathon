@@ -1,0 +1,17 @@
+{
+  "_comment": "Copy to backend_config.json and fill in from your sandbox's docs. Values starting with $ in headers are read from environment variables; $arg in url/body is filled from the tool call. Tools left out run in dry-run mode.",
+  "headers": {
+    "Content-Type": "application/json",
+    "x-client-id": "$SANDBOX_CLIENT_ID",
+    "x-client-secret": "$SANDBOX_CLIENT_SECRET"
+  },
+  "tools": {
+    "verify_payee": {
+      "method": "POST",
+      "url": "https://SANDBOX-HOST/PATH-FOR-UPI-VERIFY",
+      "body": {
+        "vpa": "$vpa"
+      }
+    }
+  }
+}

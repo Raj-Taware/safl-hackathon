@@ -1,0 +1,10 @@
+torch
+transformers>=4.51
+accelerate
+bitsandbytes
+scikit-learn
+numpy
+matplotlib
+gradio
+requests
+pytest

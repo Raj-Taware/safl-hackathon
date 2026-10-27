@@ -1,0 +1,6 @@
+{
+  "type": "document_request",
+  "requester": "PaisaNow",
+  "doc_type": "aadhaar",
+  "details": "PaisaNow is requesting your Aadhaar to show you pre-approved loan offers."
+}

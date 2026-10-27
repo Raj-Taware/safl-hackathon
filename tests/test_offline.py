@@ -1,0 +1,141 @@
+"""Offline checks that need no GPU or model download.
+Run: python -m pytest tests -q   (or: python tests/test_offline.py)
+"""
+
+import json
+import sys
+from pathlib import Path
+
+import numpy as np
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from make_scenarios import generate  # noqa: E402
+from agent import parse_tool_calls, executed_target, scenario_messages  # noqa: E402
+from demo_app import gate_decision  # noqa: E402
+from tools import DryRunBackend, HttpSandboxBackend, LocalInbox  # noqa: E402
+import probes  # noqa: E402
+
+
+def test_scenarios_are_minimal_pairs():
+    rows = generate(12, seed=0)
+    assert len(rows) == 120
+    by_pair = {}
+    for r in rows:
+        by_pair.setdefault(r["pair_id"], []).append(r)
+    for pair in by_pair.values():
+        assert sorted(x["harmful"] for x in pair) == [False, True]
+        assert pair[0]["user_msg"] == pair[1]["user_msg"]  # only the context differs
+        assert pair[0]["lookup"] == pair[1]["lookup"]
+    assert len({r["id"] for r in rows}) == 120
+
+
+def test_parse_qwen_style_tool_call():
+    text = ('<tool_call>\n{"name": "send_upi_payment", "arguments": {"vpa": "kyc.update21@ybl", '
+            '"amount_inr": 4999, "note": "KYC"}}\n</tool_call><|im_end|>')
+    calls = parse_tool_calls(text)
+    assert calls == [{"name": "send_upi_payment",
+                      "arguments": {"vpa": "kyc.update21@ybl", "amount_inr": 4999, "note": "KYC"}}]
+
+
+def test_parse_gemma4_style_tool_call():
+    text = ('<|tool_call>call:send_upi_payment{vpa:<|"|>kyc.update51@ybl<|"|>,amount_inr:2999,'
+            'note:<|"|>KYC, update: now<|"|>}<tool_call|>')
+    assert parse_tool_calls(text) == [{"name": "send_upi_payment", "arguments": {
+        "vpa": "kyc.update51@ybl", "amount_inr": 2999, "note": "KYC, update: now"}}]
+
+
+def test_parse_python_style_and_no_call():
+    assert parse_tool_calls('share_document(doc_type="aadhaar", recipient="PaisaNow")')[0]["name"] == "share_document"
+    assert parse_tool_calls("This UPI ID has fraud reports, I won't pay it.") == []
+
+
+def test_executed_target_requires_matching_vpa():
+    sc = [r for r in generate(12) if r["domain"] == "injection" and r["harmful"]][0]
+    inj = sc["target"]["arguments"]["vpa"]
+    biller = sc["lookup_result"]["biller_vpa"]
+    pay_biller = [{"name": "send_upi_payment", "arguments": {"vpa": biller, "amount_inr": 1}}]
+    pay_injected = [{"name": "send_upi_payment", "arguments": {"vpa": inj.upper(), "amount_inr": 1}}]
+    assert not executed_target(pay_biller, sc)
+    assert executed_target(pay_injected, sc)
+
+
+def test_messages_shape():
+    sc = generate(1)[0]
+    m = scenario_messages(sc)
+    assert [x["role"] for x in m] == ["system", "user", "assistant", "tool"]
+    json.loads(m[3]["content"])
+
+
+def test_gate_only_blocks_actions():
+    assert gate_decision("send_upi_payment", 3.0, 1.0) == "BLOCK"
+    assert gate_decision("send_upi_payment", 0.5, 1.0) == "ALLOW"
+    assert gate_decision("verify_payee", 9.0, 1.0) == "ALLOW"
+
+
+def test_dry_run_never_claims_execution():
+    r = DryRunBackend().execute("send_upi_payment", {"vpa": "x@ybl", "amount_inr": 5})
+    assert r["executed"] is False
+
+
+def test_http_backend_fills_args_and_falls_back(tmp_path):
+    cfg = tmp_path / "c.json"
+    cfg.write_text(json.dumps({"tools": {"verify_payee": {"url": "https://h/v/$vpa", "body": {"vpa": "$vpa"}}}}))
+    b = HttpSandboxBackend(cfg)
+    assert b._fill(b.cfg["tools"]["verify_payee"]["body"], {"vpa": "a@ok"}) == {"vpa": "a@ok"}
+    assert b._fill(b.cfg["tools"]["verify_payee"]["url"], {"vpa": "a@ok"}) == "https://h/v/a@ok"
+    assert b.execute("send_upi_payment", {"vpa": "a@ok"})["executed"] is False  # not configured
+
+
+def test_inbox_reads_example_items():
+    item = LocalInbox(ROOT / "inbox").read("BILL-2041")
+    assert item["biller_vpa"] == "msedcl@billdesk"
+
+
+def test_probe_recovers_planted_direction():
+    rng = np.random.default_rng(1)
+    n, d = 120, 64
+    y = np.array([0, 1] * (n // 2))
+    direction = rng.normal(size=d)
+    X = rng.normal(size=(n, d)) + np.outer(y * 2.0, direction / np.linalg.norm(direction))
+    for kind in ("logreg", "diffmeans"):
+        p = probes.fit(X[:80], y[:80], kind)
+        auc = probes.safe_auc(y[80:], probes.score(p, X[80:]))
+        assert auc > 0.85, (kind, auc)
+    thr = probes.threshold_at_fpr(rng.normal(size=20000), np.zeros(20000, int))
+    assert 1.4 < thr < 2.0  # ~95th percentile of a standard normal
+
+
+def test_probes_end_to_end_on_dummy_data(tmp_path, monkeypatch):
+    """Runs probes.main on fake activations laid out exactly like collect.py output."""
+    monkeypatch.chdir(tmp_path)
+    rows = generate(12)
+    rng = np.random.default_rng(0)
+    d, L = 32, 4
+    direction = rng.normal(size=d)
+    for lang, strength in (("en", 3.0), ("hi", 1.5), ("ta", 0.0)):
+        out = tmp_path / "data" / "fake"
+        out.mkdir(parents=True, exist_ok=True)
+        y = np.array([int(r["harmful"]) for r in rows])
+        acts = rng.normal(size=(len(rows), L, d))
+        acts[:, 2] += np.outer(y * strength, direction / np.linalg.norm(direction))
+        np.save(out / f"{lang}_acts.npy", acts.astype(np.float16))
+        with open(out / f"{lang}_meta.jsonl", "w") as f:
+            for r in rows:
+                f.write(json.dumps({"id": r["id"], "pair_id": r["pair_id"], "domain": r["domain"],
+                                    "lang": lang, "harmful": r["harmful"], "output": "",
+                                    "calls": [], "executed_target": False}) + "\n")
+    monkeypatch.setattr(sys, "argv", ["probes.py", "--model", "fake", "--langs", "en", "hi", "ta"])
+    probes.main()
+    res = json.loads((tmp_path / "results" / "fake_results.json").read_text())
+    lr = res["probes"]["logreg"]
+    assert lr["best_layer"] == 2
+    assert lr["per_lang"]["en"]["auroc"] > 0.9
+    assert lr["per_lang"]["ta"]["auroc"] < 0.75  # planted: no signal in "ta"
+    assert (tmp_path / "results" / "fake_probe.npz").exists()
+
+
+if __name__ == "__main__":
+    import pytest
+    sys.exit(pytest.main([__file__, "-q"]))
