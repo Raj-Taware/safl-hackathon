@@ -170,6 +170,7 @@ def main():
         en_j = np.array([js.get(("en", m["id"]), np.nan) for m in en_meta])
         ok = ~np.isnan(en_j)
         jthr = threshold_at_fpr(en_j[ok], y["en"][ok])
+        results["judge_threshold_en"] = jthr
         results["judge"] = {}
         for l in langs:
             s = np.array([js.get((l, m["id"]), np.nan) for m in data[l][1]])
