@@ -18,7 +18,7 @@ from pathlib import Path
 
 import numpy as np
 
-from agent import (load_model, scenario_messages, render_prompt, generate_with_acts,
+from agent import (load_model, scenario_messages, render_prompt, generate_batch,
                    parse_tool_calls, executed_target)
 from config import MODELS
 
@@ -29,6 +29,7 @@ def main():
     ap.add_argument("--langs", nargs="+", required=True)
     ap.add_argument("--load-4bit", action="store_true")
     ap.add_argument("--limit", type=int, default=0, help="first N scenarios only (smoke test)")
+    ap.add_argument("--batch-size", type=int, default=8)
     a = ap.parse_args()
 
     outdir = Path("data") / a.model
@@ -47,25 +48,25 @@ def main():
             scen = scen[:a.limit]
         all_acts, t0 = [], time.time()
         with open(meta_p, "w", encoding="utf-8") as mf:
-            for i, sc in enumerate(scen):
-                prompt = render_prompt(tok, scenario_messages(sc))
-                text, acts = generate_with_acts(tok, model, prompt)
-                calls = parse_tool_calls(text)
-                all_acts.append(acts)
-                mf.write(json.dumps({
-                    "id": sc["id"], "pair_id": sc["pair_id"], "domain": sc["domain"],
-                    "lang": lang, "harmful": sc["harmful"],
-                    "human_reviewed": sc.get("human_reviewed", lang == "en"),
-                    "output": text, "calls": calls,
-                    "executed_target": executed_target(calls, sc),
-                }, ensure_ascii=False) + "\n")
-                if i == 0:
-                    print("---- first raw output (check the tool-call format parses) ----")
-                    print(text[:600])
-                    print("parsed:", calls)
-                if (i + 1) % 20 == 0:
-                    rate = (time.time() - t0) / (i + 1)
-                    print(f"{lang}: {i+1}/{len(scen)}  {rate:.1f}s each")
+            for b in range(0, len(scen), a.batch_size):
+                chunk = scen[b:b + a.batch_size]
+                outs = generate_batch(tok, model, [render_prompt(tok, scenario_messages(sc)) for sc in chunk])
+                for i, (sc, (text, acts)) in enumerate(zip(chunk, outs), b):
+                    calls = parse_tool_calls(text)
+                    all_acts.append(acts)
+                    mf.write(json.dumps({
+                        "id": sc["id"], "pair_id": sc["pair_id"], "domain": sc["domain"],
+                        "lang": lang, "harmful": sc["harmful"],
+                        "human_reviewed": sc.get("human_reviewed", lang == "en"),
+                        "output": text, "calls": calls,
+                        "executed_target": executed_target(calls, sc),
+                    }, ensure_ascii=False) + "\n")
+                    if i == 0:
+                        print("---- first raw output (check the tool-call format parses) ----")
+                        print(text[:600])
+                        print("parsed:", calls)
+                done = b + len(chunk)
+                print(f"{lang}: {done}/{len(scen)}  {(time.time() - t0) / done:.1f}s each")
         np.save(acts_p, np.stack(all_acts))
         rate = (time.time() - t0) / len(scen)
         print(f"saved {lang}: {len(scen)} scenarios, {rate:.1f}s each "

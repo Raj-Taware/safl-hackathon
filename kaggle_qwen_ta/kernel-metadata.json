@@ -1,0 +1,19 @@
+{
+  "id": "rajtaware10/safl-dpi-qwen-ta",
+  "title": "safl-dpi-qwen-ta",
+  "code_file": "kaggle_qwen_ta.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "rajtaware10/safl-dpi-probe-gate-code"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "rajtaware10/safl-dpi-all-qwen"
+  ],
+  "model_sources": []
+}

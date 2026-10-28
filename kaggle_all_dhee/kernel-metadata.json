@@ -1,0 +1,19 @@
+{
+  "id": "rajtaware10/safl-dpi-all-dhee",
+  "title": "safl-dpi-all-dhee",
+  "code_file": "kaggle_all_dhee.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "rajtaware10/safl-dpi-probe-gate-code"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [
+    "rajtaware10/safl-dpi-english"
+  ],
+  "model_sources": []
+}

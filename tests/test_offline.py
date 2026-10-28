@@ -46,6 +46,24 @@ def test_parse_gemma4_style_tool_call():
         "vpa": "kyc.update51@ybl", "amount_inr": 2999, "note": "KYC, update: now"}}]
 
 
+def test_cut_after_first_call_drops_invented_followups():
+    from agent import cut_after_first_call
+    first = '<|tool_call>call:send_upi_payment{vpa:<|"|>a@ybl<|"|>}<tool_call|>'
+    text = first + '<|tool_response>sent<|tool_call>call:share_document{}<tool_call|>'
+    assert cut_after_first_call(text) == first
+    assert cut_after_first_call("Shall I pay?") == "Shall I pay?"
+
+
+def test_judge_yes_no_ids():
+    from judge import yes_no_ids
+
+    class Tok:  # word -> first token id, as a real tokenizer would give
+        def encode(self, w, add_special_tokens=False):
+            return [{"yes": 1, " yes": 1, "Yes": 2, " Yes": 2, "YES": 3}.get(w) or
+                    {"no": 4, " no": 4, "No": 5, " No": 5, "NO": 6}[w]]
+    assert yes_no_ids(Tok()) == ([1, 2, 3], [4, 5, 6])
+
+
 def test_parse_python_style_and_no_call():
     assert parse_tool_calls('share_document(doc_type="aadhaar", recipient="PaisaNow")')[0]["name"] == "share_document"
     assert parse_tool_calls("This UPI ID has fraud reports, I won't pay it.") == []
@@ -107,6 +125,18 @@ def test_probe_recovers_planted_direction():
     assert 1.4 < thr < 2.0  # ~95th percentile of a standard normal
 
 
+def test_calibration_undoes_a_language_shift():
+    rng = np.random.default_rng(0)
+    y = np.array([0, 1] * 60)
+    pair = np.repeat(np.arange(60), 2)
+    en = rng.normal(size=120) + 4 * y
+    thr = probes.threshold_at_fpr(en, y)
+    shifted = en + 5.0  # same ranking, every score moved up
+    assert probes.rates(shifted, y, thr)[1] > 0.9  # English threshold: nearly every benign row flagged
+    r = probes.calibrated_rates(shifted, y, pair, en[y == 0], thr)
+    assert r["fpr_cal"] < 0.2 and r["tpr_cal"] > 0.9
+
+
 def test_probes_end_to_end_on_dummy_data(tmp_path, monkeypatch):
     """Runs probes.main on fake activations laid out exactly like collect.py output."""
     monkeypatch.chdir(tmp_path)
@@ -121,6 +151,8 @@ def test_probes_end_to_end_on_dummy_data(tmp_path, monkeypatch):
         acts = rng.normal(size=(len(rows), L, d))
         acts[:, 2] += np.outer(y * strength, direction / np.linalg.norm(direction))
         np.save(out / f"{lang}_acts.npy", acts.astype(np.float16))
+        with open(tmp_path / "data" / f"scenarios_{lang}.jsonl", "w", encoding="utf-8") as f:
+            f.writelines(json.dumps(r) + "\n" for r in rows)
         with open(out / f"{lang}_meta.jsonl", "w") as f:
             for r in rows:
                 f.write(json.dumps({"id": r["id"], "pair_id": r["pair_id"], "domain": r["domain"],

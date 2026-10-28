@@ -59,6 +59,12 @@ Verified:
   - Dhee must load on one GPU (`SINGLE_GPU_MODELS` in `agent.py`): split over 2 GPUs, Gemma-4 fails with a cuda:0 vs cuda:1 error.
   - `kaggle kernels logs` returned nothing; the notebook writes logs to `/kaggle/working/logs/`, read them with `kaggle kernels output ... --file-pattern logs`.
 
+- English run, 28 Oct (kernel `rajtaware10/safl-dpi-english`). Batched generation (bs 8, left pad, stop at first tool call) gives the same acts as bs 1 (cos > 0.9999); speed-up Dhee 1.8x (2.9 s/scenario in the full run), Qwen none (11.7 s). Judge is now one forward pass reading P(yes)/P(yes+no) (8-9 s/item, yes+no mass median 0.94-0.99).
+  - English AUROC with pair folds is about 1.0 from layer 1 for both models, and a TF-IDF text classifier gets 0.997, so English pair-fold AUROC shows nothing. Leave-one-domain-out (train on 4 domains, test on the 5th): logreg probe reaches 1.0 at Qwen layers 20-29 and Dhee layers 7-10; text classifier 0.75. `probes.py` now picks the layer by leave-one-domain-out AUROC (Qwen 20, Dhee 7) and reports the text baseline.
+  - Harmful action done (English): Dhee 80% (all except injection), Qwen 15% (injection 8/12). Qwen sometimes writes the tool name `send_upi payment`; the parser does not count it as a call (5/120). Open: count it or not.
+- Per-language calibration (Raj chose 28 Oct): 10 labelled benign rows per language shift the English threshold by (their median - English benign median); `probes.py` reports TPR/FPR at the English threshold and calibrated (mean over 20 draws, calibration pairs excluded), for probe and judge.
+- All-language run launched 28 Oct on UNREVIEWED drafts (`human_reviewed=False`): kernels `rajtaware10/safl-dpi-all-dhee` and `-all-qwen` (`kaggle_all_*/`). Rerun `probes.py` locally on their outputs (the kernels use the old layer pick). Rerun collect for languages whose review changes the text.
+
 Not verified:
 - Behaviour on the other 4 harm domains and on translated text (smoke test covered `payee_mismatch` only).
 - Translation quality. Review sheets exist (28 Oct, Kaggle kernel `rajtaware10/safl-dpi-translate`, Qwen3-8B drafts, 113 strings per language) and were sent to Raj; human review not done. Known problems: hi/mr/ta drafts write names in native script (54/42/54 rows flagged) and break 8/10/6 UPI IDs. Code-mixed sheets were re-drafted with few-shot examples (v2, `kaggle_translate/` now runs only hi_en mr_en ta_en); rows still English: hi_en 1, mr_en 13, ta_en 39. Tamil drafts are weak and some change the meaning. The review CSVs are not committed yet.

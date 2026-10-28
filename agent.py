@@ -59,21 +59,47 @@ def render_prompt(tok, messages, tools=TOOL_SCHEMAS):
                                    tokenize=False, enable_thinking=False)
 
 
-def generate_with_acts(tok, model, prompt_text, max_new_tokens=MAX_NEW_TOKENS):
-    """One pass: greedy generation plus hidden states of the last prompt token
-    at every layer. Returns (text, acts[n_layers+1, d_model] float16)."""
+# End of the first tool call (Qwen, Gemma-4/Dhee). The agent's move is scored up to
+# here; without the stop Dhee keeps writing invented follow-up calls.
+TOOL_CALL_END = ["</tool_call>", "<tool_call|>"]
+
+
+def _left_pad(tok):
+    tok.padding_side = "left"  # last position = last real prompt token in every row
+    if tok.pad_token is None:
+        tok.pad_token = tok.eos_token
+
+
+def cut_after_first_call(text):
+    ends = [text.find(s) + len(s) for s in TOOL_CALL_END if s in text]
+    return text[:min(ends)] if ends else text
+
+
+def generate_batch(tok, model, prompt_texts, max_new_tokens=MAX_NEW_TOKENS):
+    """Greedy generation for a batch of prompts plus hidden states of the last
+    prompt token at every layer. Returns [(text, acts[n_layers+1, d_model] float16)]."""
     import torch
 
-    enc = tok(prompt_text, return_tensors="pt", add_special_tokens=False).to(model.device)
+    _left_pad(tok)
+    enc = tok(prompt_texts, return_tensors="pt", padding=True,
+              add_special_tokens=False).to(model.device)
     with torch.no_grad():
         out = model.generate(**enc, max_new_tokens=max_new_tokens, do_sample=False,
                              return_dict_in_generate=True, output_hidden_states=True,
-                             pad_token_id=tok.pad_token_id or tok.eos_token_id)
-    first_step = out.hidden_states[0]  # tuple over layers, each [1, prompt_len, d]
-    acts = np.stack([h[0, -1].float().cpu().numpy() for h in first_step]).astype(np.float16)
-    gen_ids = out.sequences[0, enc["input_ids"].shape[1]:]
-    text = tok.decode(gen_ids, skip_special_tokens=False)
-    return text, acts
+                             stop_strings=TOOL_CALL_END, tokenizer=tok,
+                             pad_token_id=tok.pad_token_id)
+    first_step = out.hidden_states[0]  # tuple over layers, each [B, prompt_len, d]
+    acts = torch.stack([h[:, -1] for h in first_step], 1).float().cpu().numpy().astype(np.float16)
+    n = enc["input_ids"].shape[1]
+    res = []
+    for i in range(len(prompt_texts)):
+        ids = [t for t in out.sequences[i, n:].tolist() if t != tok.pad_token_id]
+        res.append((cut_after_first_call(tok.decode(ids, skip_special_tokens=False)), acts[i]))
+    return res
+
+
+def generate_with_acts(tok, model, prompt_text, max_new_tokens=MAX_NEW_TOKENS):
+    return generate_batch(tok, model, [prompt_text], max_new_tokens)[0]
 
 
 def acts_only(tok, model, prompt_text):
