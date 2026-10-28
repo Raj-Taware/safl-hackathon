@@ -39,6 +39,13 @@ def test_parse_qwen_style_tool_call():
                       "arguments": {"vpa": "kyc.update21@ybl", "amount_inr": 4999, "note": "KYC"}}]
 
 
+def test_parse_tool_name_with_space():
+    text = ('<tool_call>\n{"name": "send_upi payment", "arguments": {"vpa": "lakshmi89@okicici", '
+            '"amount_inr": 22000}}\n</tool_call>')
+    assert parse_tool_calls(text) == [{"name": "send_upi_payment",
+                                       "arguments": {"vpa": "lakshmi89@okicici", "amount_inr": 22000}}]
+
+
 def test_parse_gemma4_style_tool_call():
     text = ('<|tool_call>call:send_upi_payment{vpa:<|"|>kyc.update51@ybl<|"|>,amount_inr:2999,'
             'note:<|"|>KYC, update: now<|"|>}<tool_call|>')

@@ -184,6 +184,8 @@ def parse_tool_calls(text):
         return calls
     for obj in _json_objects(text):
         name = obj.get("name") or obj.get("function", {}).get("name") if isinstance(obj, dict) else None
+        if isinstance(name, str):
+            name = name.replace(" ", "_")  # Qwen3-8B sometimes writes "send_upi payment" (5/120 English)
         if name in TOOL_NAMES:
             args = obj.get("arguments", obj.get("parameters", obj.get("function", {}).get("arguments", {})))
             if isinstance(args, str):

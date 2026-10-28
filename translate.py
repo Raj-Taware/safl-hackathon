@@ -7,6 +7,9 @@ Step 2 (you):  for each row you check, put y in "reviewed". If the draft is wron
 Step 3:        python translate.py apply --langs hi hi_en mr mr_en ta ta_en
    -> data/scenarios_<lang>.jsonl, each row tagged human_reviewed=True/False
 
+Text used: "corrected" (human) if set, else "ai_corrected" if the column exists
+(Claude-written template translations, 29 Oct; not a human review), else "draft".
+
 Only free text is translated: the user's message and the lookup result's
 "details" field. Names, UPI IDs, amounts and IDs are kept as-is.
 """
@@ -114,7 +117,8 @@ def apply(args):
             for r in csv.DictReader(f):
                 fixed = r["corrected"].strip()
                 checked = bool(fixed) or r.get("reviewed", "").strip().lower() in ("y", "yes")
-                table[(r["field"], r["english"])] = (fixed or r["draft"], checked)
+                table[(r["field"], r["english"])] = (fixed or r.get("ai_corrected", "").strip() or r["draft"],
+                                                     checked)
         out = []
         for sc in scen:
             s = json.loads(json.dumps(sc))
