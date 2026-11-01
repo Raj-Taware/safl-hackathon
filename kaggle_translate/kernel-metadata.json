@@ -1,0 +1,17 @@
+{
+  "id": "rajtaware10/safl-dpi-translate",
+  "title": "safl-dpi-translate",
+  "code_file": "kaggle_translate.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "machine_shape": "NvidiaTeslaT4",
+  "dataset_sources": [
+    "rajtaware10/safl-dpi-probe-gate-code"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

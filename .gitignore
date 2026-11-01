@@ -1,0 +1,7 @@
+__pycache__/
+.pytest_cache/
+# Real sandbox config (credentials stay in env vars, but keep endpoints local)
+backend_config.json
+# Generated outputs: activations, model outputs, results
+data/*/
+results/
